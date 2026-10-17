@@ -110,10 +110,13 @@ Generator 定位是生成 RuoYi 风格骨架，不是完成业务。Entity/BO/VO
 - **登录端点**：`POST /auth/login`（AuthController 类级 `@RequestMapping("/auth")`，不是旧版的 `/login`）。请求体 `{clientId, grantType, username, password}`——`clientId` + `grantType` 必须匹配 `sys_client` 种子（本地库 `e5cd7e4891bf95d1d19206ce24a7b32e`，grant_type=`password,social`），否则报客户端认证异常。
 - **`@ApiEncrypt` 与 api-decrypt**：`api-decrypt.enabled=true` 是上游默认且**已确认保持**（项目一同款决策）。开启时 CryptoFilter（`@ConditionalOnProperty(api-decrypt.enabled=true)` 注册，urlPatterns `/*` 最高优先级）对 POST/PUT：带 `encrypt-key` 请求头 → 按配置 RSA 私钥解密 body；**不带头且方法带 `@ApiEncrypt`（如 /auth/login）→ 直接 403**。响应默认不加密（`@ApiEncrypt.response()` 默认 false）。本地调试走明文：启动参数 `--api-decrypt.enabled=false`（仅本进程生效，**勿改配置文件**）。
 - **认证请求双头**：`Authorization: Bearer <token>`（`token-prefix: Bearer` 配在 `ruoyi-common/ruoyi-common-satoken/src/main/resources/common-satoken.yml`，不在 application.yml）+ `clientid: <clientId>`。SecurityConfig 比对请求头/参数里的 clientid 与 token 内嵌值，**缺 clientid 头 → 401「客户端ID与Token不匹配」**。前端 `admin/src/utils/request.ts` 用 `axios.defaults.headers['clientid']` 统一注入，接口联调时勿忘。
-- **登录响应特例**：`LoginVo` 逐字段 `@JsonProperty`，线上为**蛇形** `access_token` / `expire_in` / `client_id`；框架无全局命名策略，其余响应仍是标准**驼峰**——契约 §2 的驼峰约定不变，勿被登录响应带偏。
+- **登录响应结构（2026-10-18 实测）**：`R<LoginVo>` → `{code:200, msg, data:{access_token, expire_in, client_id, refresh_token, ...}}`。`LoginVo` 逐字段 `@JsonProperty`，**data 内是蛇形**，且 **token 在 `data.access_token`、不在顶层**；框架无全局命名策略，其余响应仍是标准**驼峰**——契约 §2 的驼峰约定不变，勿被登录响应带偏。
+- **前后端加密对齐（2026-10-18 端到端实测通过）**：admin 侧 `.env.development` 的 `VITE_APP_ENCRYPT` 与后端 `api-decrypt.enabled` **必须同开同关**，默认都是 true。加密方案（见 `admin/src/utils/crypto.ts` + `jsencrypt.ts`，写联调脚本时照抄）：随机 32 字符 AES-256 key → 请求头 `encrypt-key` = RSA(公钥, base64(key))，body = base64(AES/ECB/PKCS7(JSON))；仅当请求头 `isEncrypt: 'true'` **且** 方法为 POST/PUT 时才加密。响应默认不加密（`@ApiEncrypt.response()` 默认 false）。开关错配的表现：前端开后端关 → 后端收到密文、JSON 解析失败；前端关后端开 → 带 `@ApiEncrypt` 的接口直接 403。
 - **当前登录信息**：`GET /system/user/getInfo`（SysUserController 类级 `/system/user`，不在 /auth 下）。
 - **验证码**：`captcha.enable=true` 默认开；本地调试启动参数 `--captcha.enable=false`。
-- **已验证的本地明文冒烟**：`java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=dev --captcha.enable=false --api-decrypt.enabled=false` → POST /auth/login → 带双头 GET /system/user/getInfo → GET /v3/api-docs/{分组}。
+- **已验证的冒烟（两条）**：
+  1. **明文**（省事）：`java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=dev --captcha.enable=false --api-decrypt.enabled=false` → POST /auth/login → 带双头 GET /system/user/getInfo → GET /v3/api-docs/{分组}。
+  2. **全链路加密**（贴近真实，2026-10-18 全绿）：后端默认配置（captcha + api-decrypt 都开）→ admin `VITE_APP_PORT=8081 pnpm dev` → 经 vite 代理 `/dev-api` 走完 验证码 → RSA+AES 加密登录 → 双头 getInfo → SpringDoc 分组。
 
 ---
 
