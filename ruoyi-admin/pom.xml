@@ -86,22 +86,16 @@
             <artifactId>ruoyi-job</artifactId>
         </dependency>
 
-        <!-- AI业务模块 -->
-        <dependency>
-            <groupId>org.dromara</groupId>
-            <artifactId>ruoyi-ai</artifactId>
-        </dependency>
-
         <!--  demo模块  -->
         <dependency>
             <groupId>org.dromara</groupId>
             <artifactId>ruoyi-demo</artifactId>
         </dependency>
 
-        <!--  工作流模块  -->
+        <!-- 挂号业务模块 -->
         <dependency>
             <groupId>org.dromara</groupId>
-            <artifactId>ruoyi-workflow</artifactId>
+            <artifactId>appt</artifactId>
         </dependency>
 
         <!-- Spring Boot Admin 客户端 -->

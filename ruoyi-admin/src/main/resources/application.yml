@@ -1,7 +1,7 @@
 # 开发环境配置
 server:
-  # 服务器的HTTP端口，默认为8080
-  port: 8080
+  # 服务器的HTTP端口（号源 QueueDepth 后端）
+  port: 8082
   servlet:
     # 应用的访问路径
     context-path: /
@@ -107,7 +107,6 @@ security:
     - /error
     - /*/api-docs
     - /*/api-docs/**
-    - /warm-flow-ui/config
     - /snail-chat/**
     - /api/snail/chat/**
 
@@ -162,9 +161,9 @@ springdoc:
     enabled: true
   info:
     # 标题
-    title: '标题：RuoYi-Vue-Plus后台管理系统_接口文档'
+    title: '号源 QueueDepth · 接口文档'
     # 描述
-    description: '描述：用于管理集团旗下公司的人员信息,具体包括XXX,XXX模块...'
+    description: '医院门诊预约挂号系统（技术演示，虚构数据，不提供医疗服务）'
     # 版本
     version: '版本号: ${project.version}'
     # 作者信息
@@ -182,8 +181,8 @@ springdoc:
       packages-to-scan: org.dromara.system
     - group: 4.代码生成模块
       packages-to-scan: org.dromara.gen
-    - group: 5.工作流模块
-      packages-to-scan: org.dromara.workflow
+    - group: 5.挂号业务模块
+      packages-to-scan: org.dromara.appt
 
 # 防止XSS攻击
 xss:
@@ -192,7 +191,6 @@ xss:
   # 排除链接
   excludeUrls:
     - /system/notice
-    - /warm-flow/save-json
 
 --- # 分布式锁 lock4j 全局配置
 lock4j:
@@ -230,31 +228,6 @@ message:
   web-socket-send-time-limit: 10000
   # WebSocket 发送缓冲区大小
   web-socket-buffer-size-limit: 64000
-
---- # warm-flow工作流配置
-warm-flow:
-  # 是否开启工作流，默认true
-  enabled: true
-  # 是否开启设计器ui
-  ui: true
-  # 是否显示流程图顶部文字
-  top-text-show: true
-  # 是否渲染节点悬浮提示，默认true
-  node-tooltip: true
-  # 默认Authorization，如果有多个token，用逗号分隔
-  token-name: ${sa-token.token-name},clientid
-
---- # LiteFlow 业务规则编排
-liteflow:
-  # 跟随工作流模块开关，避免禁用工作流时仍加载任务办理链
-  enable: ${warm-flow.enabled:true}
-  metrics:
-    # 指标自动配置使用独立开关，需同步关闭以避免初始化未启用的 LiteFlow
-    enabled: ${liteflow.enable:true}
-  # 工作流模块用于编排任务办理链路
-  rule-source: classpath:liteflow/*.el.xml
-  # 开启虚拟线程
-  enable-virtual-thread: true
 
 --- # mqtt 配置
 # 具体配置还需查看文档
