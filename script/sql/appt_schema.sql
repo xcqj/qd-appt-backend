@@ -145,6 +145,7 @@ CREATE TABLE `appt_fee_standard` (
   `title`       varchar(32)   NOT NULL COMMENT '职称线值',
   `clinic_type` varchar(32)   NOT NULL COMMENT '门诊类型码',
   `fee`         decimal(10,2) NOT NULL COMMENT '挂号费',
+  `status`      char(1)       NOT NULL DEFAULT '0' COMMENT '状态：0正常 1停用（2026-10-18 补）',
   `create_dept` bigint        DEFAULT NULL COMMENT '创建部门',
   `create_by`   bigint        DEFAULT NULL COMMENT '创建者',
   `create_time` datetime      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
