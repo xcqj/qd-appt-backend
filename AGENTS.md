@@ -27,6 +27,8 @@
 | Mapper XML | `ruoyi-modules/appt/src/main/resources/mapper/appt/` |
 | 启动端口 | 8082（`ruoyi-admin/src/main/resources/application.yml`） |
 | SpringDoc 分组 | `5.挂号业务模块`（packages-to-scan: org.dromara.appt） |
+| 数据源 | MySQL 库 `appt`（utf8mb4_general_ci；复用现有 `blog-mysql` 容器，与项目一 `ry-vue` 库隔离） |
+| Redis | database 1（复用现有 `blog-redis` 容器；key 命名空间 `appt:*`） |
 
 **包职责**（技术方案 §1.2）：common 状态枚举/异常/Redis Key/Lua · schedule 院区科室人员模板排班号源 + 生成器 + 放号任务 · registration 挂号单/限购/黑名单 · payment 支付单/退款单/渠道抽象/Mock 渠道/回调/巡检 · triage 签到/加号/停诊上报 · account 就诊人/收藏 · reconcile 对账 · notice 站内信 · job 定时任务框架。
 
@@ -101,21 +103,35 @@ Generator 定位是生成 RuoYi 风格骨架，不是完成业务。Entity/BO/VO
 - 复制模块目录不要带上 `target/` 残留；模块改名后必须 clean。
 - IDEA Maven 同步报错（未解析插件等）时，先对齐 IDEA 与命令行的 Maven home / settings.xml，再判断是不是代码问题。
 
-## 8. 测试策略
+## 8. 认证链路（RuoYi-Vue-Plus 6.0.0 实测，2026-10-18 冒烟验证）
+
+与旧版 RuoYi 差异很大，接入 / 调试 / 写冒烟时必读：
+
+- **登录端点**：`POST /auth/login`（AuthController 类级 `@RequestMapping("/auth")`，不是旧版的 `/login`）。请求体 `{clientId, grantType, username, password}`——`clientId` + `grantType` 必须匹配 `sys_client` 种子（本地库 `e5cd7e4891bf95d1d19206ce24a7b32e`，grant_type=`password,social`），否则报客户端认证异常。
+- **`@ApiEncrypt` 与 api-decrypt**：`api-decrypt.enabled=true` 是上游默认且**已确认保持**（项目一同款决策）。开启时 CryptoFilter（`@ConditionalOnProperty(api-decrypt.enabled=true)` 注册，urlPatterns `/*` 最高优先级）对 POST/PUT：带 `encrypt-key` 请求头 → 按配置 RSA 私钥解密 body；**不带头且方法带 `@ApiEncrypt`（如 /auth/login）→ 直接 403**。响应默认不加密（`@ApiEncrypt.response()` 默认 false）。本地调试走明文：启动参数 `--api-decrypt.enabled=false`（仅本进程生效，**勿改配置文件**）。
+- **认证请求双头**：`Authorization: Bearer <token>`（`token-prefix: Bearer` 配在 `ruoyi-common/ruoyi-common-satoken/src/main/resources/common-satoken.yml`，不在 application.yml）+ `clientid: <clientId>`。SecurityConfig 比对请求头/参数里的 clientid 与 token 内嵌值，**缺 clientid 头 → 401「客户端ID与Token不匹配」**。前端 `admin/src/utils/request.ts` 用 `axios.defaults.headers['clientid']` 统一注入，接口联调时勿忘。
+- **登录响应特例**：`LoginVo` 逐字段 `@JsonProperty`，线上为**蛇形** `access_token` / `expire_in` / `client_id`；框架无全局命名策略，其余响应仍是标准**驼峰**——契约 §2 的驼峰约定不变，勿被登录响应带偏。
+- **当前登录信息**：`GET /system/user/getInfo`（SysUserController 类级 `/system/user`，不在 /auth 下）。
+- **验证码**：`captcha.enable=true` 默认开；本地调试启动参数 `--captcha.enable=false`。
+- **已验证的本地明文冒烟**：`java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=dev --captcha.enable=false --api-decrypt.enabled=false` → POST /auth/login → 带双头 GET /system/user/getInfo → GET /v3/api-docs/{分组}。
+
+---
+
+## 9. 测试策略
 
 - **单元测试只覆盖纯逻辑**（不碰数据库、不起 Spring 容器）：状态机流转、爽约网格覆盖、限购计数、号源生成器（起止 + 步长 → 时间点序列）、对账七查判定。这些逻辑必须实现为独立可测类，不得揉进 ServiceImpl 大方法。
 - CRUD / HTTP 链路不写 Java 单测，由 Apifox 用例覆盖（正向 / 鉴权失败 / 参数校验 / 资源不存在 / 越权）；Controller 层不做 mock 测试。
 - 关键链路集成测试三条（PRD §12）：① 50 并发争抢同一时间点仅 1 笔成功 ② 超时关单 → 号源回补 → 可被再次预约 ③ 支付回调重复 3 次仅入账 1 次。
 - 单测与被测代码同模块 `src/test/java`，依赖根 pom 统一的 spring-boot-starter-test（JUnit5 + Mockito）。
 
-## 9. 安全红线
+## 10. 安全红线
 
 - 不信任前端传入的 `userId` / `patientId` / 权限字段 / 关键状态字段；数据归属与操作权限必须由后端按当前登录用户强制校验，隔离靠服务端过滤而非前端隐藏按钮。
 - PII（身份证 / 就诊卡号）：日志禁止打印；列表与详情响应脱敏；存储预留加密接口位（红线 15）。
 - 公共接口不得泄露非公开数据；不匹配归属的资源按「不存在」处理，不泄露存在性。
 - 不提交或硬编码真实生产 Token、密码、密钥、数据库凭据；本地测试配置不得改变生产安全策略。
 
-## 10. Agent 工作流
+## 11. Agent 工作流
 
 中大型 Feature 遵循：
 
@@ -130,7 +146,7 @@ Generator 定位是生成 RuoYi 风格骨架，不是完成业务。Entity/BO/VO
 - MVP 范围与「明确不做」清单以 PRD §1.4 / §13 为准（§4 红线 16），除需求文档明确加入外不主动实现。
 - 新会话上下文组织顺序：本文件全文 → `../docs/README.md` 阅读顺序 → PRD §14 决策记录 → 技术方案对应章节。
 
-## 11. 参考文档
+## 12. 参考文档
 
 | 文档（相对路径） | 内容 |
 |---|---|
